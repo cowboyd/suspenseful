@@ -3,7 +3,6 @@ import { createNumber, blowUp } from './setup.ts';
 
 import { run, suspend, expect as $expect } from '../mod.ts';
 
-
 describe('generator function', () => {
   it('can compose multiple promises via generator', async () => {
     await expect(run(function*() {
@@ -82,7 +81,7 @@ describe('generator function', () => {
       return one;
     });
 
-    //await task.halt();
+    await task.halt();
 
     await expect(task).rejects.toEqual(new Error('halted'));
   });
