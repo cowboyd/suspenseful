@@ -1,7 +1,10 @@
 import type { Computation, Continuation } from "./deps.ts";
 import type { Task } from "./types.ts";
-import { reset, shift, evaluate } from "./deps.ts";
+import { assert, reset, shift, evaluate } from "./deps.ts";
 import { createFuture } from "./future.ts";
+
+export * from "./types.ts";
+export * from "./future.ts";
 
 // not any context can be suspended.
 export function run<T>(block: () => Computation<T>): Task<T> {
@@ -19,10 +22,26 @@ export function run<T>(block: () => Computation<T>): Task<T> {
     halt: {
       value: function halt() {
         reject(new Error('halted'));
-        evaluate(context.unsuspend);
+        evaluate(context.destroy);
       }
     }
   }) as Task<T>;
+}
+
+export function perform<T>(body: (resume: Continuation<T,void>) => Computation<T>): Computation<T> {
+  return shift<T>(function*(resume) {
+    return function*(context: Context) {
+      let child = createContext();
+      let resumeCaller = (value: T) => evaluate(function*() {
+        yield* child.destroy();
+        yield* context.reenter();
+        yield* resume(value)(context);
+      });
+
+      yield* context.yieldTo(child);
+      yield* reduce(() => body(resumeCaller), child);
+    }
+  });
 }
 
 export function suspend() {
@@ -32,11 +51,14 @@ export function suspend() {
 }
 
 export function sleep(duration: number) {
-  return shift<void>(function*(k) {
-    return function*(context: Context) {
-      setTimeout(() => evaluate(() => k()(context)), duration);
+  return perform(function*(resume) {
+    let timeout = setTimeout(resume, duration);
+    try {
+      yield* suspend()
+    } finally {
+      clearTimeout(timeout);
     }
-  })
+  });
 }
 
 export function expect<T>(promise: Promise<T>): Computation<T> {
@@ -73,29 +95,44 @@ export function* reduce<T, TContext>(block: () => Computation<T>, context: TCont
 
 interface Context {
   id: number;
-  suspend(k: Continuation<void>): Computation<void>;
-  unsuspend(): Computation<void>;
+  suspend(k: Continuation): Computation<void>;
+  destroy(): Computation<void>;
+  yieldTo(child: Context): Computation<void>;
+  reenter(): Computation<void>;
 }
 
 let ids = 1;
 function createContext(): Context {
-  let escape: Continuation<void>;
+  let escape: Continuation;
+  let yieldingTo: Context | undefined;
+
   let context: Context = {
     id: ids++,
+    *yieldTo(child: Context) {
+      assert(!yieldingTo, "cannot yield to two children at the same time");
+      yieldingTo = child;
+    },
+    *reenter() {
+      assert(!!yieldingTo, "cannot resume a context that is not currently yielding");
+      yieldingTo = void 0;
+    },
     *suspend(k) {
       escape = k;
       context.suspend = function*() {
         throw new Error('operation cannot be suspended twice');
       }
     },
-    *unsuspend() {
+    *destroy() {
+      if (yieldingTo) {
+        yield* yieldingTo.destroy();
+      }
       if (!escape) {
         context.suspend = function* suspend(k) {
-          let next = k();
-          if (typeof next === 'function') {
-            yield* next(context);
-          }
+          yield* k(function*() {})(context);
         }
+      } else {
+        yield* escape(function*() {})(context);
+
       }
     }
   };

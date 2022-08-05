@@ -1,7 +1,8 @@
 import { describe, it, expect } from './suite.ts';
 import { createNumber, blowUp } from './setup.ts';
 
-import { run, suspend, expect as $expect } from '../mod.ts';
+import { createFuture, run, perform, sleep, suspend, expect as $expect } from '../mod.ts';
+
 
 describe('generator function', () => {
   it('can compose multiple promises via generator', async () => {
@@ -86,40 +87,42 @@ describe('generator function', () => {
     await expect(task).rejects.toEqual(new Error('halted'));
   });
 
-  // it('halts task when halted generator', async () => {
-  //   let child: Task | undefined;
-  //   let task = run(function*() {
-  //     yield function*(task: Task) {
-  //       child = task;
-  //       yield sleep(100);
-  //     };
-  //   });
+  it('halts task when halted generator', async () => {
+    let halted = false;
+    let t = run(function*() {
+      yield* perform(function*() {
+        try {
+          yield* suspend();
+        } finally {
+          halted = true;
+        }
+      });
+    });
 
-  //   task.halt();
+    await t.halt();
 
-  //   await expect(task).rejects.toHaveProperty('message', 'halted');
-  //   await expect(child).rejects.toHaveProperty('message', 'halted');
-  //   expect(task.state).toEqual('halted');
-  //   expect(child && child.state).toEqual('halted');
-  // });
+    await expect(t).rejects.toEqual(new Error('halted'));
+    expect(halted).toEqual(true);
+  });
 
-  // it('can suspend in finally block', async () => {
-  //   let { future, produce } = createFuture();
+  it('can suspend in finally block', async () => {
+    let { future, resolve } = createFuture<number>();
 
-  //   let task = run(function*() {
-  //     try {
-  //       yield;
-  //     } finally {
-  //       yield sleep(10);
-  //       produce({ state: 'completed', value: 123 });
-  //     }
-  //   });
+    let task = run(function*() {
+      try {
+        yield* suspend();
+      } finally {
+        yield* sleep(10);
+        yield* sleep(10);
+        resolve(123);
 
-  //   task.halt();
+      }
+    });
 
-  //   await expect(future).resolves.toEqual(123);
-  //   expect(task.state).toEqual('halted');
-  // });
+    await task.halt();
+
+    await expect(future).resolves.toEqual(123);
+  });
 
   // it('can suspend in yielded finally block', async () => {
   //   let things: string[] = [];
