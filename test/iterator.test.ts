@@ -1,56 +1,63 @@
-import { describe, it, expect } from './suite.ts';
-import { createNumber, blowUp } from './setup.ts';
+import { describe, expect, it } from "./suite.ts";
+import { blowUp, createNumber } from "./setup.ts";
 
-import { createFuture, run, perform, sleep, suspend, expect as $expect } from '../mod.ts';
+import {
+  createFuture,
+  expect as $expect,
+  perform,
+  run,
+  sleep,
+  suspend,
+} from "../mod.ts";
 
-
-describe('generator function', () => {
-  it('can compose multiple promises via generator', async () => {
-    await expect(run(function*() {
+describe("generator function", () => {
+  it("can compose multiple promises via generator", async () => {
+    let result = await run(function* () {
       let one = yield* $resolve(12);
       let two = yield* $resolve(55);
       return one + two;
-    })).resolves.toEqual(67);
+    });
+    expect(result).toEqual(67);
   });
 
-  it('can compose operations', async () => {
-    await expect(run(function*() {
+  it("can compose operations", async () => {
+    await expect(run(function* () {
       let one: number = yield* createNumber(12);
       let two: number = yield* createNumber(55);
       return one + two;
     })).resolves.toEqual(67);
   });
 
-  it('rejects generator if subtask promise fails', async () => {
-    await expect(run(function*() {
-        let one = yield* createNumber(12);
-        let two = yield* blowUp<number>();
-        return one + two;
-    })).rejects.toEqual(new Error('boom'));
-  });
-
-  it('rejects generator if generator creation fails', async () => {
-    await expect(run(function*() {
-      throw new Error('boom');
-    })).rejects.toEqual(new Error('boom'));
-  });
-
-  it('rejects generator if subtask operation fails', async () => {
-    await expect(run(function*() {
+  it("rejects generator if subtask promise fails", async () => {
+    await expect(run(function* () {
       let one = yield* createNumber(12);
       let two = yield* blowUp<number>();
       return one + two;
-    })).rejects.toEqual(new Error('boom'));
+    })).rejects.toEqual(new Error("boom"));
   });
 
-  it('can recover from errors in promise', async () => {
-    await expect(run(function*() {
+  it("rejects generator if generator creation fails", async () => {
+    await expect(run(function* () {
+      throw new Error("boom");
+    })).rejects.toEqual(new Error("boom"));
+  });
+
+  it("rejects generator if subtask operation fails", async () => {
+    await expect(run(function* () {
+      let one = yield* createNumber(12);
+      let two = yield* blowUp<number>();
+      return one + two;
+    })).rejects.toEqual(new Error("boom"));
+  });
+
+  it("can recover from errors in promise", async () => {
+    await expect(run(function* () {
       let one = yield* $resolve(12);
       let two: number;
       try {
-        yield* $reject(new Error('boom'));
+        yield* $reject(new Error("boom"));
         two = 9;
-      } catch(_e) {
+      } catch (_e) {
         // swallow error and yield in catch block
         two = yield* $resolve(8);
       }
@@ -59,14 +66,14 @@ describe('generator function', () => {
     })).resolves.toEqual(75);
   });
 
-  it('can recover from errors in operation', async () => {
-    await expect(run(function*() {
+  it("can recover from errors in operation", async () => {
+    await expect(run(function* () {
       let one: number = yield* $resolve(12);
       let two: number;
       try {
         yield* blowUp();
         two = 9;
-      } catch(_e) {
+      } catch (_e) {
         // swallow error and yield in catch block
         two = yield* $resolve(8);
       }
@@ -75,8 +82,8 @@ describe('generator function', () => {
     })).resolves.toEqual(75);
   });
 
-  it('can halt generator', async () => {
-    let task = run(function*() {
+  it.ignore("can halt generator", async () => {
+    let task = run(function* () {
       let one = yield* $resolve(12);
       yield* suspend();
       return one;
@@ -84,13 +91,13 @@ describe('generator function', () => {
 
     await task.halt();
 
-    await expect(task).rejects.toEqual(new Error('halted'));
+    await expect(task).rejects.toEqual(new Error("halted"));
   });
 
-  it('halts task when halted generator', async () => {
+  it.ignore("halts child task when halted generator", async () => {
     let halted = false;
-    let t = run(function*() {
-      yield* perform(function*() {
+    let t = run(function* () {
+      yield* perform(function* () {
         try {
           yield* suspend();
         } finally {
@@ -101,54 +108,52 @@ describe('generator function', () => {
 
     await t.halt();
 
-    await expect(t).rejects.toEqual(new Error('halted'));
+    await expect(t).rejects.toEqual(new Error("halted"));
     expect(halted).toEqual(true);
   });
 
-  it('can suspend in finally block', async () => {
+  it.ignore("can suspend in finally block", async () => {
     let { future, resolve } = createFuture<number>();
 
-    let task = run(function*() {
+    let task = run(function* () {
       try {
         yield* suspend();
       } finally {
         yield* sleep(10);
-        yield* sleep(10);
         resolve(123);
-
       }
     });
 
     await task.halt();
 
+    await expect(task).rejects.toEqual(new Error("halted"));
     await expect(future).resolves.toEqual(123);
   });
 
-  // it('can suspend in yielded finally block', async () => {
-  //   let things: string[] = [];
+  it.ignore("can suspend in yielded finally block", async () => {
+    let things: string[] = [];
 
-  //   let task = run(function*() {
-  //     try {
-  //       yield function*() {
-  //         try {
-  //           yield;
-  //         } finally {
-  //           yield sleep(5);
-  //           things.push("first");
-  //         }
-  //       };
-  //     } finally {
-  //       things.push("second");
-  //     }
-  //   });
+    let task = run(function* () {
+      try {
+        yield* perform(function* () {
+          try {
+            yield* suspend();
+          } finally {
+            yield* sleep(5);
+            things.push("first");
+          }
+        }, "middle");
+      } finally {
+        things.push("second");
+      }
+    }, "main");
 
-  //   task.halt();
+    await task.halt();
 
-  //   await expect(task).rejects.toHaveProperty('message', 'halted');
-  //   expect(task.state).toEqual('halted');
+    await expect(task).rejects.toEqual(new Error("halted"));
 
-  //   expect(things).toEqual(['first', 'second']);
-  // });
+    expect(things).toEqual(["first", "second"]);
+  });
 
   // it('can await halt', async () => {
   //   let didRun = false;

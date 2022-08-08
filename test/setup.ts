@@ -9,5 +9,5 @@ export function* createNumber(num: number) {
 
 export function* blowUp<T>(): Computation<T> {
   yield* sleep(1);
-  throw new Error('boom');
+  throw new Error("boom");
 }
