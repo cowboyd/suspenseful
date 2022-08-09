@@ -14,13 +14,12 @@ export function perform<T>(
     resolve: Continuation<T, void>,
     reject: Continuation<Error, void>,
   ) => Computation<void>,
-  name?: string,
 ): Computation<T> {
   return shift<T>(function* ($resolve, $reject, $escape) {
     return function* (context: Context) {
       context.escape = createEscape(context, $escape);
       return yield* shift<T>(function* ($$resolve, $$reject) {
-        let child = createContext(name);
+        let child = createContext();
         context.yieldingTo = child;
 
         let outcome = {
@@ -40,6 +39,7 @@ export function perform<T>(
           reject: (error: Error) =>
             evaluate(function* () {
               if (child.status === "active") {
+                outcome.reject = () => {};
                 try {
                   delete context.yieldingTo;
                   yield* destroy(child);
@@ -50,7 +50,15 @@ export function perform<T>(
               }
             }),
         };
-        yield* reduce(() => body(outcome.resolve, outcome.reject), child);
+        let operations = body(outcome.resolve, outcome.reject);
+        child.name = (() => {
+          if ("name" in operations) {
+            return (operations as unknown as { name: string }).name;
+          } else {
+            return body.name ?? "anonymous";
+          }
+        })();
+        yield* reduce(operations, child);
       });
     };
   });
@@ -76,13 +84,13 @@ export type Reduction<T> = {
 };
 
 export function* reduce<T>(
-  block: () => Computation<T>,
+  operations: Computation<T>,
   context: Context,
 ): Computation<Reduction<T>> {
   return yield* shift<Reduction<T>>(function* (resolve, reject) {
     let start = yield* reset<(context: Context) => Computation>(function* () {
       try {
-        let value = yield* block();
+        let value = yield* operations;
 
         return function* () {
           return { type: "resolved", value };

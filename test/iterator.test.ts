@@ -142,7 +142,7 @@ describe("generator function", () => {
             yield* sleep(5);
             things.push("first");
           }
-        }, "middle");
+        });
       } finally {
         things.push("second");
       }

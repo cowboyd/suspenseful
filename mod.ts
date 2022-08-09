@@ -15,7 +15,7 @@ export function run<T>(block: () => Computation<T>, name?: string): Task<T> {
   let { future, resolve, reject } = createFuture<T>();
 
   evaluate(function* () {
-    let result = yield* reduce(block, context);
+    let result = yield* reduce(block(), context);
     if (result.type === "resolved") {
       resolve(result.value);
     } else if (result.type === "rejected") {
@@ -37,24 +37,32 @@ export function run<T>(block: () => Computation<T>, name?: string): Task<T> {
 }
 
 export function sleep(duration: number) {
-  return perform(function* (resume) {
-    let timeout = setTimeout(resume, duration);
-    try {
-      yield* suspend();
-    } finally {
-      clearTimeout(timeout);
-    }
-  }, "sleep");
+  return perform((resolve) => ({
+    name: "sleep",
+    duration,
+    *[Symbol.iterator]() {
+      let timeout = setTimeout(resolve, duration);
+      try {
+        yield* suspend();
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+  }));
 }
 
 export function expect<T>(promise: Promise<T>): Computation<T> {
-  return perform(function* (resolve, reject) {
-    let handler = { resolve, reject };
-    promise.then(handler.resolve, handler.reject);
-    try {
-      yield* suspend();
-    } finally {
-      handler.resolve = handler.reject = () => {};
-    }
-  }, "expect");
+  return perform((resolve, reject) => ({
+    name: "expect",
+    promise,
+    *[Symbol.iterator]() {
+      let handler = { resolve, reject };
+      promise.then(handler.resolve, handler.reject);
+      try {
+        yield* suspend();
+      } finally {
+        handler.resolve = handler.reject = () => {};
+      }
+    },
+  }));
 }
