@@ -155,37 +155,36 @@ describe("generator function", () => {
     expect(things).toEqual(["first", "second"]);
   });
 
-  // it('can await halt', async () => {
-  //   let didRun = false;
+  it('can await halt', async () => {
+    let didRun = false;
 
-  //   let task = run(function*() {
-  //     try {
-  //       yield;
-  //     } finally {
-  //       yield Promise.resolve(1);
-  //       didRun = true;
-  //     }
-  //   });
+    let task = run(function*() {
+      try {
+        yield* suspend();
+      } finally {
+        yield* $resolve(1);
+        didRun = true;
+      }
+    });
 
-  //   await task.halt();
+    await task.halt();
 
-  //   expect(didRun).toEqual(true);
-  //   expect(task.state).toEqual('halted');
-  // });
+    expect(didRun).toEqual(true);
+    await expect(task).rejects.toEqual(new Error('halted'));
+  });
 
-  // it('can be halted while in the generator', async () => {
-  //   let { future, produce } = createFuture();
-  //   let task = run(function*(inner) {
-  //     inner.run(function*() {
-  //       yield sleep(2);
-  //       produce({ state: 'errored', error: new Error('boom') });
-  //     });
-  //     yield future;
-  //   });
+  it.ignore('can be halted while in the generator', async () => {
+    // let { future, reject } = createFuture();
+    // let task = run(function*() {
+    //   yield* spawn(function*() {
+    //     yield* sleep(2);
+    //     reject(new Error('boom'));
+    //   });
+    //   yield* $expect(future);
+    // });
 
-  //   await expect(task).rejects.toHaveProperty('message', 'boom');
-  //   expect(task.state).toEqual('errored');
-  // });
+    // await expect(task).rejects.toEqual(new Error('boom'));
+  });
 
   // it('can halt itself', async () => {
   //   let task = run(function*(inner) {
