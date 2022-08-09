@@ -82,7 +82,7 @@ describe("generator function", () => {
     })).resolves.toEqual(75);
   });
 
-  it.ignore("can halt generator", async () => {
+  it("can halt generator", async () => {
     let task = run(function* () {
       let one = yield* $resolve(12);
       yield* suspend();
@@ -94,7 +94,7 @@ describe("generator function", () => {
     await expect(task).rejects.toEqual(new Error("halted"));
   });
 
-  it.ignore("halts child task when halted generator", async () => {
+  it("halts child task when halted generator", async () => {
     let halted = false;
     let t = run(function* () {
       yield* perform(function* () {
@@ -112,7 +112,7 @@ describe("generator function", () => {
     expect(halted).toEqual(true);
   });
 
-  it.ignore("can suspend in finally block", async () => {
+  it("can suspend in finally block", async () => {
     let { future, resolve } = createFuture<number>();
 
     let task = run(function* () {
@@ -130,7 +130,7 @@ describe("generator function", () => {
     await expect(future).resolves.toEqual(123);
   });
 
-  it.ignore("can suspend in yielded finally block", async () => {
+  it("can suspend in yielded finally block", async () => {
     let things: string[] = [];
 
     let task = run(function* () {

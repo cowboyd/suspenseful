@@ -1,15 +1,8 @@
-import type { Computation, Continuation } from "./deps.ts";
+import type { Computation } from "./deps.ts";
 import type { Task } from "./types.ts";
-import { evaluate, shift } from "./deps.ts";
+import { evaluate } from "./deps.ts";
 import { createFuture, Future } from "./future.ts";
-import {
-  Context,
-  createContext,
-  destroy,
-  perform,
-  reduce,
-  suspend,
-} from "./context.ts";
+import { createContext, destroy, perform, reduce, suspend } from "./context.ts";
 import { thunk } from "./thunk.ts";
 
 export * from "./types.ts";
@@ -35,6 +28,7 @@ export function run<T>(block: () => Computation<T>, name?: string): Task<T> {
     halt: {
       enumerable: false,
       value: thunk(function halt() {
+        reject(new Error("halted"));
         return Future.eval(() => destroy(context));
       }),
     },
@@ -54,33 +48,13 @@ export function sleep(duration: number) {
 }
 
 export function expect<T>(promise: Promise<T>): Computation<T> {
-  return shift<T>(function* (resolve, reject) {
-    return function* (context: Context) {
-      return yield* shift<T>(function* ($$resolve, $$reject) {
-        promise
-          .then((value) => {
-            if (context.status === "active") {
-              evaluate(function* () {
-                try {
-                  $$resolve(yield* resolve(value)(context));
-                } catch (error) {
-                  $$reject(error);
-                }
-              });
-            }
-          })
-          .catch((error) => {
-            if (context.status === "active") {
-              evaluate(function* () {
-                try {
-                  $$resolve(yield* reject(error)(context));
-                } catch (error) {
-                  $$reject(error);
-                }
-              });
-            }
-          });
-      });
-    };
-  });
+  return perform(function* (resolve, reject) {
+    let handler = { resolve, reject };
+    promise.then(handler.resolve, handler.reject);
+    try {
+      yield* suspend();
+    } finally {
+      handler.resolve = handler.reject = () => {};
+    }
+  }, "expect");
 }
