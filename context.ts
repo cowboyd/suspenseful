@@ -64,6 +64,37 @@ export function perform<T>(
   });
 }
 
+export function effect<T>(body: (provide: Continuation<T,Computation<void>>) => Computation<void>): Computation<T> {
+  return shift<T>(function*($resolve, _$, $escape) {
+    return function* (context: Context) {
+      context.escape = createEscape(context, $escape);
+      let result: unknown;
+
+      function provide(value: T) {
+        return shift<void>(function*(resolve,reject, escape) {
+          return function*(resource: Context) {
+            context.escape = createEscape(resource, escape);
+            try {
+              result = yield* $resolve(value)(context);
+              yield* resolve()(resource);
+            } catch (error) {
+              yield* reject(error)(resource);
+            }
+          }
+        });
+      }
+
+      let resource = createContext('resource');
+      try {
+        yield* reduce(body(provide), resource);
+        return result;
+      } finally {
+        yield* destroy(resource);
+      }
+    }
+  })
+}
+
 export function suspend() {
   return shift<void>(function* (_$, _$$, escape) {
     return (context: Context) => {

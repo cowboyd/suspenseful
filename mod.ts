@@ -2,13 +2,13 @@ import type { Computation } from "./deps.ts";
 import type { Task } from "./types.ts";
 import { evaluate } from "./deps.ts";
 import { createFuture, Future } from "./future.ts";
-import { createContext, destroy, perform, reduce, suspend } from "./context.ts";
+import { createContext, destroy, effect, perform, reduce, suspend } from "./context.ts";
 import { thunk } from "./thunk.ts";
 
 export * from "./types.ts";
 export * from "./future.ts";
 
-export { perform, suspend } from "./context.ts";
+export { perform, suspend, effect } from "./context.ts";
 
 export function run<T>(block: () => Computation<T>, name?: string): Task<T> {
   let context = createContext(name);
@@ -65,4 +65,15 @@ export function expect<T>(promise: Promise<T>): Computation<T> {
       }
     },
   }));
+}
+
+export function spawn<T>(operations: Computation<T>): Computation<Task<T>> {
+  return effect(function*(provide) {
+    let task = run(() => operations);
+    try {
+      yield* provide(task);
+    } finally {
+      yield* task.halt();
+    }
+  });
 }
